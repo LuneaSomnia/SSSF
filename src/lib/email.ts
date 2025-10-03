@@ -28,13 +28,17 @@ export const sendOwnerNotification = async (order: OrderData): Promise<void> => 
   try {
     console.log('Sending order notification:', order);
     
-    const response = await fetch('http://localhost:3001/api/send-order-email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(order),
-    });
+const API_BASE =
+  import.meta.env.VITE_API_BASE || "http://localhost:3001";
+
+const response = await fetch(`${API_BASE}/api/send-order-email`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(order),
+});
+
 
     if (!response.ok) {
       const errorText = await response.text();
