@@ -12,6 +12,7 @@
     "dev:full": "concurrently \"npm run dev\" \"npm run email-server\""
   },
   "dependencies": {
+    "axios": "^1.12.2",
     "concurrently": "^9.2.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
