@@ -1,47 +1,43 @@
+// project/server/email-service.cjs
+
 const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 require('dotenv').config();
-const { sendMail: sendViaSendPulse } = require('./sendpulse-api.cjs');
 
+const { sendMail: sendViaSendPulse } = require('./sendpulse-api.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Log environment variables on startup (without sensitive data)
-console.log('Email service starting with config:');
-console.log('SMTP_HOST:', process.env.SMTP_HOST);
-console.log('SMTP_PORT:', process.env.SMTP_PORT);
-console.log('SMTP_USER:', process.env.SMTP_USER);
+// Startup logging
+console.log('Email service starting:');
+console.log('USE_SENDPULSE_API:', process.env.USE_SENDPULSE_API);
 console.log('EMAIL_FROM:', process.env.EMAIL_FROM);
 console.log('OWNER_EMAIL:', process.env.OWNER_EMAIL);
 
-// Create transporter
+// Create transporter to fallback (if needed)
 const createTransporter = () => {
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp-pulse.com',
+    host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+    secure: process.env.SMTP_PORT === '465',
     auth: {
-      user: process.env.SMTP_USER || 'raysaga429@gmail.com',
-      pass: process.env.SMTP_PASS || 'F37s8ePpa5T',
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
     },
     tls: {
       rejectUnauthorized: false
-    },
-    debug: true, // Enable debug logging
-    logger: true // Enable logger
+    }
   });
 };
 
-// Get delivery option label
+// Helper functions for formatting
 const getDeliveryOptionLabel = (item) => {
   if (item.deliveryOption === 'asis') return 'As Is';
-  
   const category = item.category;
   if (category === 'fish') return 'Fillet & Gutted';
   if (category === 'whole-fish') return 'Cleaned & Descaled';
@@ -52,12 +48,10 @@ const getDeliveryOptionLabel = (item) => {
   return 'As Is';
 };
 
-// Format currency
 const formatKES = (amount) => {
   return `KSh ${amount.toLocaleString()}`;
 };
 
-// Generate email HTML content
 const generateEmailHTML = (order) => {
   const itemsHTML = order.items.map(item => `
     <tr style="border-bottom: 1px solid #e5e7eb;">
@@ -90,14 +84,10 @@ const generateEmailHTML = (order) => {
       <title>New Order - SeasideSeafood</title>
     </head>
     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px;">
-      
-      <!-- Header -->
       <div style="background: linear-gradient(135deg, #0891b2 0%, #f97316 100%); color: white; padding: 30px; border-radius: 12px; text-align: center; margin-bottom: 30px;">
         <h1 style="margin: 0; font-size: 28px; font-weight: bold;">🐟 NEW ORDER RECEIVED</h1>
         <p style="margin: 10px 0 0 0; font-size: 18px; opacity: 0.9;">SeasideSeafood Order Notification</p>
       </div>
-
-      <!-- Order Info -->
       <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
         <h2 style="color: #1e40af; margin-top: 0; font-size: 20px;">📋 Order Details</h2>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -113,8 +103,6 @@ const generateEmailHTML = (order) => {
           </div>
         </div>
       </div>
-
-      <!-- Customer Info -->
       <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
         <h2 style="color: #1e40af; margin-top: 0; font-size: 20px;">👤 Customer Information</h2>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -138,11 +126,8 @@ const generateEmailHTML = (order) => {
         </div>
         ` : ''}
       </div>
-
-      <!-- Items Ordered -->
       <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
         <h2 style="color: #1e40af; margin-top: 0; font-size: 20px;">🐟 Items Ordered (${order.items.length} item${order.items.length > 1 ? 's' : ''})</h2>
-        
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
           <thead>
             <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
@@ -158,8 +143,6 @@ const generateEmailHTML = (order) => {
           </tbody>
         </table>
       </div>
-
-      <!-- Payment & Total -->
       <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
         <h2 style="color: #166534; margin-top: 0; font-size: 20px;">💳 Payment & Total</h2>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
@@ -174,7 +157,6 @@ const generateEmailHTML = (order) => {
             ${order.items.length} item${order.items.length > 1 ? 's' : ''}
           </div>
         </div>
-        
         <div style="background: white; border: 2px solid #059669; border-radius: 8px; padding: 20px; text-align: center;">
           <div style="font-size: 16px; color: #374151; margin-bottom: 5px;">TOTAL AMOUNT</div>
           <div style="font-size: 32px; font-weight: bold; color: #059669;">${formatKES(order.totalAmount)}</div>
@@ -184,8 +166,6 @@ const generateEmailHTML = (order) => {
           }
         </div>
       </div>
-
-      <!-- Action Required -->
       <div style="background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
         <h2 style="color: #92400e; margin-top: 0; font-size: 20px;">⏰ Action Required</h2>
         <p style="margin: 0; color: #92400e; font-weight: bold; font-size: 16px;">
@@ -198,8 +178,6 @@ const generateEmailHTML = (order) => {
           💬 <a href="https://wa.me/${order.customerPhone.replace(/\D/g, '')}" style="color: #059669; text-decoration: none;">WhatsApp</a>
         </div>
       </div>
-
-      <!-- Footer -->
       <div style="text-align: center; padding: 20px; color: #6b7280; border-top: 1px solid #e5e7eb;">
         <p style="margin: 0; font-size: 14px;">
           This is an automated notification from SeasideSeafood<br>
@@ -217,15 +195,13 @@ const generateEmailHTML = (order) => {
           })} (EAT)
         </p>
       </div>
-
     </body>
     </html>
   `;
 };
 
-// Generate plain text version
 const generateEmailText = (order) => {
-  const itemsText = order.items.map(item => 
+  const itemsText = order.items.map(item =>
     `• ${item.name} (${item.categoryDisplay})
   Quantity: ${item.quantity} KG
   Unit Price: ${formatKES(item.price)} per KG
@@ -275,37 +251,27 @@ Order received at: ${new Date().toLocaleString('en-KE', {
 })} (EAT)`;
 };
 
-// API endpoint to send email
 app.post('/api/send-order-email', async (req, res) => {
   try {
-    console.log('Received order email request:', JSON.stringify(req.body, null, 2));
-    
+    console.log('Request body for order email:', JSON.stringify(req.body, null, 2));
     const order = req.body;
-    
-    // Validate required fields
     if (!order.orderId || !order.customerName || !order.customerPhone || !order.items || !Array.isArray(order.items)) {
-      console.error('Invalid order data received:', order);
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Missing required order fields',
-        received: Object.keys(order)
+      console.error('Missing required order fields:', order);
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required order fields'
       });
     }
-    
+
     const transporter = createTransporter();
-    
-    // Test connection before sending
-    console.log('Testing SMTP connection...');
-    await transporter.verify();
-    console.log('SMTP connection verified successfully');
-    
+
     const mailOptions = {
       from: {
         name: 'SeasideSeafood Orders',
-        address: process.env.FROM_EMAIL || process.env.EMAIL_FROM || 'orders@seasideseafood.co.ke'
+        address: process.env.EMAIL_FROM || 'orders@seasideseafood.co.ke'
       },
-      to: process.env.TO_EMAIL || process.env.OWNER_EMAIL || 'orders.seasideseafood@gmail.com',
-      subject: `🐟 New ${order.orderType === 'bulk' ? 'BULK' : ''} Order #${order.orderId} - ${formatKES(order.totalAmount)}`,
+      to: process.env.OWNER_EMAIL,
+      subject: `🐟 New ${order.orderType === 'bulk' ? 'BULK ' : ''}Order #${order.orderId} - ${formatKES(order.totalAmount)}`,
       text: generateEmailText(order),
       html: generateEmailHTML(order),
       priority: 'high',
@@ -316,57 +282,53 @@ app.post('/api/send-order-email', async (req, res) => {
       }
     };
 
-    console.log('Sending email with options:', {
+    console.log('Preparing to send email:', {
       from: mailOptions.from,
       to: mailOptions.to,
       subject: mailOptions.subject
     });
 
     if (process.env.USE_SENDPULSE_API === 'true') {
-  // Use SendPulse API (HTTPS) instead of SMTP
-  try {
-    const apiResp = await sendViaSendPulse({
-      from: mailOptions.from,   // keeps your current `from` object and name
-      to: mailOptions.to,       // string or array (sendpulse helper normalizes)
-      subject: mailOptions.subject,
-      html: mailOptions.html,
-      text: mailOptions.text
-    });
-    console.log('SendPulse API response:', apiResp);
-    // API returns an object like { result: true, id: ... } or similar; store whole response
-    res.json({ success: true, apiResponse: apiResp });
-  } catch (apiErr) {
-    console.error('SendPulse API error:', apiErr && apiErr.response ? apiErr.response.data : apiErr.message || apiErr);
-    // fallback to SMTP if you still want to attempt it:
-    if (process.env.ALLOW_SMTP_FALLBACK === 'true') {
-      const info = await transporter.sendMail(mailOptions);
-      console.log('Fallback SMTP sent:', info && info.messageId);
-      res.json({ success: true, messageId: info.messageId, note: 'Sent via SMTP fallback' });
+      try {
+        const apiResp = await sendViaSendPulse({
+          from: mailOptions.from,
+          to: mailOptions.to,
+          subject: mailOptions.subject,
+          html: mailOptions.html,
+          text: mailOptions.text
+        });
+        console.log('SendPulse API response:', apiResp);
+        return res.json({ success: true, apiResponse: apiResp });
+      } catch (apiErr) {
+        console.error('Error sending via SendPulse API:', apiErr && (apiErr.response ? apiErr.response.data : apiErr.message));
+        if (process.env.ALLOW_SMTP_FALLBACK === 'true') {
+          const info = await transporter.sendMail(mailOptions);
+          console.log('Fallback SMTP mail sent, messageId =', info && info.messageId);
+          return res.json({ success: true, messageId: info.messageId, fallback: true });
+        } else {
+          return res.status(500).json({ success: false, error: 'SendPulse API error' });
+        }
+      }
     } else {
-      res.status(500).json({ success: false, error: 'SendPulse API error' });
+      const info = await transporter.sendMail(mailOptions);
+      console.log('SMTP email sent successfully, messageId =', info.messageId);
+      return res.json({ success: true, messageId: info.messageId });
     }
-  }
-} else {
-  // Existing SMTP flow (unchanged)
-  const info = await transporter.sendMail(mailOptions);
-  console.log('Owner notification email sent successfully:', info.messageId);
-  res.json({ success: true, messageId: info.messageId });
-}
 
-    
-  } catch (error) {
-    console.error('Failed to send owner notification email:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      command: error.command,
-      response: error.response,
-      responseCode: error.responseCode
-    });
-    res.status(500).json({ success: false, error: error.message });
+  } catch (err) {
+    console.error('Failed sending order email:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Email service running on port ${PORT}`);
+});
+
+// Error wrappers
+process.on('unhandledRejection', err => {
+  console.error('Unhandled Rejection:', err);
+});
+process.on('uncaughtException', err => {
+  console.error('Uncaught Exception:', err);
 });
