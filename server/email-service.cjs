@@ -2,6 +2,8 @@ const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 require('dotenv').config();
+const { sendMail: sendViaSendPulse } = require('./sendpulse-api.cjs');
+
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -320,11 +322,37 @@ app.post('/api/send-order-email', async (req, res) => {
       subject: mailOptions.subject
     });
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Owner notification email sent successfully:', info.messageId);
-    console.log('Email info:', info);
-    
-    res.json({ success: true, messageId: info.messageId });
+    if (process.env.USE_SENDPULSE_API === 'true') {
+  // Use SendPulse API (HTTPS) instead of SMTP
+  try {
+    const apiResp = await sendViaSendPulse({
+      from: mailOptions.from,   // keeps your current `from` object and name
+      to: mailOptions.to,       // string or array (sendpulse helper normalizes)
+      subject: mailOptions.subject,
+      html: mailOptions.html,
+      text: mailOptions.text
+    });
+    console.log('SendPulse API response:', apiResp);
+    // API returns an object like { result: true, id: ... } or similar; store whole response
+    res.json({ success: true, apiResponse: apiResp });
+  } catch (apiErr) {
+    console.error('SendPulse API error:', apiErr && apiErr.response ? apiErr.response.data : apiErr.message || apiErr);
+    // fallback to SMTP if you still want to attempt it:
+    if (process.env.ALLOW_SMTP_FALLBACK === 'true') {
+      const info = await transporter.sendMail(mailOptions);
+      console.log('Fallback SMTP sent:', info && info.messageId);
+      res.json({ success: true, messageId: info.messageId, note: 'Sent via SMTP fallback' });
+    } else {
+      res.status(500).json({ success: false, error: 'SendPulse API error' });
+    }
+  }
+} else {
+  // Existing SMTP flow (unchanged)
+  const info = await transporter.sendMail(mailOptions);
+  console.log('Owner notification email sent successfully:', info.messageId);
+  res.json({ success: true, messageId: info.messageId });
+}
+
     
   } catch (error) {
     console.error('Failed to send owner notification email:', error);
