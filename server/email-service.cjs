@@ -10,27 +10,33 @@ const { sendMail: sendViaSendPulse } = require('./sendpulse-api.cjs');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
 // Startup logging
-console.log('Email service starting:');
+console.log('Email service starting with config:');
 console.log('USE_SENDPULSE_API:', process.env.USE_SENDPULSE_API);
+console.log('SMTP_HOST:', process.env.SMTP_HOST);
+console.log('SMTP_PORT:', process.env.SMTP_PORT);
+console.log('SMTP_USER:', process.env.SMTP_USER);
 console.log('EMAIL_FROM:', process.env.EMAIL_FROM);
 console.log('OWNER_EMAIL:', process.env.OWNER_EMAIL);
 
 const createTransporter = () => {
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
+    host: process.env.SMTP_HOST || 'smtp-pulse.com',
     port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_PORT === '465',
+    secure: process.env.SMTP_PORT === '465', // true for 465
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
     },
     tls: {
       rejectUnauthorized: false
-    }
+    },
+    debug: true,
+    logger: true
   });
 };
 
@@ -65,7 +71,7 @@ const generateEmailHTML = (order) => {
       </td>
       <td style="padding: 12px; text-align: center; border-right: 1px solid #e5e7eb;">
         ${getDeliveryOptionLabel(item)}
-        ${item.cleaningFee > 0 ? `<br><small style="color: #059669;">+ ${formatKES(item.cleaningFee)} processing</small>` : ''}
+        ${item.cleaningFee > 0 ? `<br><small style="color: #059669;">+${formatKES(item.cleaningFee)} processing</small>` : ''}
       </td>
       <td style="padding: 12px; text-align: right; font-weight: bold; color: #0891b2;">
         ${formatKES(item.totalPrice)}
@@ -77,16 +83,19 @@ const generateEmailHTML = (order) => {
     <!DOCTYPE html>
     <html>
     <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>New Order Notification</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>New Order - SeasideSeafood</title>
     </head>
-    <body style="font-family: Arial, sans-serif; color: #333; max-width: 800px; margin: 0 auto; padding: 20px;">
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px;">
+
+      <!-- Header -->
       <div style="background: linear-gradient(135deg, #0891b2 0%, #f97316 100%); color: white; padding: 30px; border-radius: 12px; text-align: center; margin-bottom: 30px;">
         <h1 style="margin: 0; font-size: 28px; font-weight: bold;">🐟 NEW ORDER RECEIVED</h1>
         <p style="margin: 10px 0 0 0; font-size: 18px; opacity: 0.9;">SeasideSeafood Order Notification</p>
       </div>
 
+      <!-- Order Info -->
       <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
         <h2 style="color: #1e40af; margin-top: 0; font-size: 20px;">📋 Order Details</h2>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -103,6 +112,7 @@ const generateEmailHTML = (order) => {
         </div>
       </div>
 
+      <!-- Customer Info -->
       <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
         <h2 style="color: #1e40af; margin-top: 0; font-size: 20px;">👤 Customer Information</h2>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -127,6 +137,7 @@ const generateEmailHTML = (order) => {
         ` : ''}
       </div>
 
+      <!-- Items Ordered -->
       <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
         <h2 style="color: #1e40af; margin-top: 0; font-size: 20px;">🐟 Items Ordered (${order.items.length} item${order.items.length > 1 ? 's' : ''})</h2>
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
@@ -134,8 +145,8 @@ const generateEmailHTML = (order) => {
             <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
               <th style="padding: 12px; text-align: left; font-weight: bold; color: #475569;">Item</th>
               <th style="padding: 12px; text-align: center; font-weight: bold; color: #475569;">Quantity</th>
-              <th style="padding: 12px; text-align: center; font-weight: bold; color: #475569;">Price / KG</th>
-              <th style="padding: 12px; text-align: center; font-weight: bold; color: #475569;">Prep</th>
+              <th style="padding: 12px; text-align: center; font-weight: bold; color: #475569;">Unit Price</th>
+              <th style="padding: 12px; text-align: center; font-weight: bold; color: #475569;">Preparation</th>
               <th style="padding: 12px; text-align: right; font-weight: bold; color: #475569;">Total</th>
             </tr>
           </thead>
@@ -145,8 +156,9 @@ const generateEmailHTML = (order) => {
         </table>
       </div>
 
+      <!-- Payment & Total -->
       <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
-        <h2 style="color: #166534; margin-top: 0; font-size: 20px;">💳 Payment Summary</h2>
+        <h2 style="color: #166534; margin-top: 0; font-size: 20px;">💳 Payment & Total</h2>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
           <div>
             <strong>Payment Method:</strong><br>
@@ -155,7 +167,7 @@ const generateEmailHTML = (order) => {
             </span>
           </div>
           <div>
-            <strong>Item Count:</strong><br>
+            <strong>Items Count:</strong><br>
             ${order.items.length} item${order.items.length > 1 ? 's' : ''}
           </div>
         </div>
@@ -163,30 +175,34 @@ const generateEmailHTML = (order) => {
           <div style="font-size: 16px; color: #374151; margin-bottom: 5px;">TOTAL AMOUNT</div>
           <div style="font-size: 32px; font-weight: bold; color: #059669;">${formatKES(order.totalAmount)}</div>
           ${order.paymentMethod === 'mpesa'
-            ? '<div style="font-size: 14px; color: #6b7280; margin-top: 10px;">Payment will be verified upon delivery</div>'
-            : '<div style="font-size: 14px; color: #6b7280; margin-top: 10px;">Customer pays on delivery</div>'
+            ? '<div style="font-size: 14px; color: #6b7280; margin-top: 10px;">Payment will be verified on delivery</div>'
+            : '<div style="font-size: 14px; color: #6b7280; margin-top: 10px;">Customer will pay on delivery</div>'
           }
         </div>
       </div>
 
+      <!-- Action Required -->
       <div style="background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
-        <h2 style="color: #92400e; margin-top: 0; font-size: 20px;">⏰ Response Required</h2>
+        <h2 style="color: #92400e; margin-top: 0; font-size: 20px;">⏰ Action Required</h2>
         <p style="margin: 0; color: #92400e; font-weight: bold; font-size: 16px;">
-          Please confirm delivery time (e.g., “30 minutes”, “1 hour”)
+          Please reply to the customer with delivery time in MINUTES or HOURS<br>
+          (e.g., “30 minutes”, “1 hour”, “2 hours”)
         </p>
-        <div style="margin-top: 15px; background: white; padding: 15px; border-radius: 6px;">
-          <strong>Contact:</strong><br />
-          📞 <a href="tel:${order.customerPhone}" style="color: #0891b2; text-decoration: none;">${order.customerPhone}</a><br />
+        <div style="margin-top: 15px; padding: 15px; background: white; border-radius: 6px;">
+          <strong>Customer Contact:</strong><br>
+          📞 <a href="tel:${order.customerPhone}" style="color: #0891b2; text-decoration: none;">${order.customerPhone}</a><br>
           💬 <a href="https://wa.me/${order.customerPhone.replace(/\D/g, '')}" style="color: #059669; text-decoration: none;">WhatsApp</a>
         </div>
       </div>
 
+      <!-- Footer -->
       <div style="text-align: center; padding: 20px; color: #6b7280; border-top: 1px solid #e5e7eb;">
         <p style="margin: 0; font-size: 14px;">
-          Automated from SeasideSeafood — Fresh Seafood from Diani • Home By The Sea 😊
+          This is an automated notification from SeasideSeafood<br>
+          🌊 Fresh Seafood from Diani • Home By The Sea 😊
         </p>
         <p style="margin: 10px 0 0 0; font-size: 12px;">
-          Received: ${new Date().toLocaleString('en-KE', {
+          Order received at: ${new Date().toLocaleString('en-KE', {
             timeZone: 'Africa/Nairobi',
             year: 'numeric',
             month: 'long',
@@ -197,6 +213,7 @@ const generateEmailHTML = (order) => {
           })} (EAT)
         </p>
       </div>
+
     </body>
     </html>
   `;
@@ -212,25 +229,35 @@ const generateEmailText = (order) => {
   Total: ${formatKES(item.totalPrice)}`
   ).join('\n\n');
 
-  return `NEW ORDER RECEIVED - SeasideSeafood
+  return `🐟 NEW ORDER RECEIVED - SeasideSeafood
 
+ORDER DETAILS:
 Order ID: ${order.orderId}
 Order Type: ${order.orderType === 'bulk' ? 'BULK ORDER' : 'Single Item'}
 
-Customer Name: ${order.customerName}
+CUSTOMER INFORMATION:
+Name: ${order.customerName}
 Phone: ${order.customerPhone}
-${order.customerEmail ? `Email: ${order.customerEmail}` : ''}
+${order.customerEmail ? `Email: ${order.customerEmail}` : ''}  
 Delivery Location: ${order.deliveryLocation}
 
-Items:
+ITEMS ORDERED (${order.items.length} item${order.items.length > 1 ? 's' : ''}):
 ${itemsText}
 
-Payment Method: ${order.paymentMethod === 'mpesa' ? 'M-Pesa' : 'Cash on Delivery'}
-Total: ${formatKES(order.totalAmount)}
+PAYMENT & TOTAL:
+Payment Method: ${order.paymentMethod === 'mpesa' ? 'M-Pesa (Till: 6030812)' : 'Cash on Delivery'}
+TOTAL AMOUNT: ${formatKES(order.totalAmount)}
+${order.paymentMethod === 'mpesa' ? 'Payment will be verified on delivery' : 'Customer will pay on delivery'}
+
+ACTION REQUIRED:
+Please reply to the customer with delivery time (minutes or hours)
+
+Customer Contact: ${order.customerPhone}
+WhatsApp: https://wa.me/${order.customerPhone.replace(/\D/g, '')}
 
 ---
-
-This is an automatic notification from SeasideSeafood
+This is an automated notification from SeasideSeafood  
+Fresh Seafood from Diani • Home By The Sea 😊  
 Order received at ${new Date().toLocaleString('en-KE', {
   timeZone: 'Africa/Nairobi',
   year: 'numeric', month: 'long', day: 'numeric',
@@ -240,11 +267,14 @@ Order received at ${new Date().toLocaleString('en-KE', {
 
 app.post('/api/send-order-email', async (req, res) => {
   try {
-    console.log('Request to send order email:', JSON.stringify(req.body, null, 2));
+    console.log('Received order email request:', JSON.stringify(req.body, null, 2));
     const order = req.body;
     if (!order.orderId || !order.customerName || !order.customerPhone || !order.items || !Array.isArray(order.items)) {
-      console.error('Invalid order data:', order);
-      return res.status(400).json({ success: false, error: 'Missing required fields' });
+      console.error('Invalid order data received:', order);
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required order fields'
+      });
     }
 
     const transporter = createTransporter();
